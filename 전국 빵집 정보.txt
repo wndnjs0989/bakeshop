@@ -1,0 +1,168 @@
+## 전국 빵집 정보 ##
+DELETE /bakeshop
+
+GET /bakeshop
+GET /bakeshop/_count
+GET /bakeshop/_search
+
+# 인덱스 재생성
+PUT /bakeshop2
+{
+  "settings": {
+    "analysis": {
+      "filter": {
+        "bakeshop_stop": {
+          "type" :"stop",
+          "stopwords":["은","는","이","가","을","를",
+                      "에","의","와","과","도","로",
+                      "에서","하다"]
+        },
+        "min_length_2":{
+          "type":"length",
+          "min":2
+        }
+      },
+      "analyzer": {
+        "bakeshop_analyzer":{
+          "tokenizer":"nori_tokenizer",
+          "filter": [
+            "nori_part_of_speech",
+            "nori_readingform",
+            "lowercase",
+            "stop",
+            "stemmer",
+            "bakeshop_stop",
+            "min_length_2"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "시설명": {
+        "type": "text",
+        "analyzer": "bakeshop_analyzer",
+        "fields": {
+          "keyword": {          
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "도로명주소": {
+        "type": "text",
+        "analyzer": "bakeshop_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "대표메뉴": {
+        "type": "text",
+        "analyzer": "bakeshop_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "지역명": {
+        "type": "text",
+        "analyzer": "bakeshop_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "홈페이지주소": {
+        "type": "keyword"
+      },
+      "전화번호": {
+        "type": "keyword"
+      },
+      "location": {
+        "type": "geo_point"
+      },
+      "메뉴가격": {
+        "type": "integer"
+      },
+      "기준일자": {
+        "type": "keyword"
+      },
+      "message": {
+        "type": "text",
+        "analyzer": "bakeshop_analyzer"
+      }
+    }
+  }
+}
+
+POST _reindex
+{
+  "source": {
+    "index": "bakeshop"
+  },
+  "dest": {
+    "index": "bakeshop2"
+  },
+  "script": {
+    "source": """
+      if (ctx._source['위도'] != null && ctx._source['경도'] != null) {
+        ctx._source.location = [
+          'lat': ctx._source['위도'],
+          'lon': ctx._source['경도']
+        ];
+      }
+      ctx._source.remove('위도');
+      ctx._source.remove('경도');
+    """
+  }
+}
+DELETE /bakeshop2
+GET /bakeshop2
+GET /bakeshop2/_count
+GET /bakeshop2/_search
+
+# 전화 번호 제거(csv 파일부터 전부 NULL 값 )
+POST bakeshop2/_update_by_query
+{
+  "script": {
+    "source": """
+      ctx._source.remove('전화번호');
+    """
+  }
+}
+GET /bakeshop2/_search
+{
+  "_source": "전화번호",
+  "size": 1
+}
+
+GET /bakeshop2/_search
+{
+  "_source": [
+    "기준일자",
+    "location"
+  ]
+}
+
+# 토큰 분석
+GET /bakeshop2/_analyze
+{
+  "text":"오밀조밀,경기 시흥시 목감둘레로 80 오밀조밀,41,41390,126.847971,37.370576,경기,,,밤식빵,6000원,20221231",
+  "analyzer": "bakeshop_analyzer"
+}
+
+GET /bakeshop2/_search
+{
+  "_source": [
+    "message"
+  ],
+  "size": 3
+}
